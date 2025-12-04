@@ -1,0 +1,25 @@
+---
+
+namespace: "smabot"
+name: "storage"
+version: "1.0.0"
+readme: "README.md"
+
+authors:
+  - "Mirko Wilhelmi <Mirko.Wilhelmi@sma.de>"
+##    - "Author2 (https://author2.example.com)"
+##    - "Author3 <author3@example.com>"
+dependencies:
+##    "other_namespace.collection1": ">=1.0.0"
+##    "other_namespace.collection2": ">=2.0.0,<3.0.0"
+  "community.general": "*"    # note: "*" selects the highest version available
+  "smabot.base": "*"    # note: "*" selects the highest version available
+
+license:
+  - "BSD3"
+
+##tags:
+##    - demo
+##    - collection
+##repository: "https://www.github.com/my_org/my_collection"
+
