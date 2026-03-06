@@ -1,0 +1,13 @@
+{#
+##
+## jinja template snippet for nginx config force converting
+## any plain http requests to https, must be included inside
+## http{} block
+##
+#}
+## disable plain http requests by force moving any of them to https
+server {
+  listen 80;
+  server_name _;
+  return 301 https://$host$request_uri;
+}

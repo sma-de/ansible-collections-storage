@@ -1,0 +1,191 @@
+---
+
+##
+## note: as this is not amazon aws s3 default implementation but a
+##   third-party "leigth-weight emulation" there might be some
+##   limitations when compared to the "original", currently known
+##   problem zones:
+##
+##     -> user management: very simple filed based, not really
+##          comparable to aws iam, things like user-level
+##          contrains ("this user is not allowed to create buckets")
+##          are not possible
+##
+##     -> bucket policies and restrictions: s3 bucket ownership mode
+##          is not (?yet?) supported, meaning any uploading user
+##          will be the owner of its uploaded files and there is
+##          hardly anything one can do about this
+##
+##            -> combining bucket policies with object acl's also
+##               seems buggy
+##
+
+
+    ## this role supports vars.d
+  - include_role:
+      name: smabot.base.expand_vardirs
+
+
+  - smabot.storage.normalize_zenko_docker_cfg:
+    register: _tmp_normres
+    no_log: >-
+      {{ (smabot_storage_zenko_docker_args.hide_secrets
+       | default(True) ) != False }}
+
+  - set_fact:
+      smabot_storage_zenko_docker_args_normed: >-
+        {{ _tmp_normres.normalized }}
+    no_log: >-
+      {{ _tmp_normres.normalized.hide_secrets != False }}
+
+
+  - name: ensure local dirs exist
+    ansible.builtin.file: "{{ _iter_dirs }}"
+    loop: >-
+      {{ smabot_storage_zenko_docker_args_normed._export_cfgs.dirs_create }}
+    loop_control:
+      loop_var: _iter_dirs
+
+
+  - block:
+
+      - name: prepare azure storage backends
+        include_role:
+          name: smabot.azure.azure_storage
+        vars:
+          smabot_azure_azure_storage_args: >-
+            {{ smabot_storage_zenko_docker_args_normed.storage_backends._export_cfgs.azure_storage }}
+        when: >-
+          (smabot_storage_zenko_docker_args_normed.storage_backends._export_cfgs.azure_storage
+           | default(False)) is truthy
+
+
+      - name: optionally handle user credentials
+        include_role:
+          name: smabot.utils.credentials_autogen_cycle
+        vars:
+          smabot_utils_credentials_autogen_cycle_args: >-
+            {{ smabot_storage_zenko_docker_args_normed.users._export_configs.user_creds }}
+
+##      - debug:
+##          var: smabot_utils_credentials_autogen_cycle_result
+
+
+        ##
+        ## re-add updated user secrets to config
+        ##
+      - set_fact:
+          smabot_storage_zenko_docker_args_normed: >-
+            {{ smabot_storage_zenko_docker_args_normed |
+               smabot.storage.zenko_docker_creds_to_cfg(
+                 credmap=smabot_utils_credentials_autogen_cycle_result
+               )
+            }}
+        no_log: >-
+          {{ smabot_storage_zenko_docker_args_normed.hide_secrets != False }}
+
+
+    ## TODO: make this configurable!!
+    delegate_to: localhost
+    become: no
+
+    when: >-
+      (smabot_storage_zenko_docker_args_normed.users._export_configs.user_creds
+       | default(False)) is truthy
+
+
+  - include_tasks: handle_json_cfgfiles.yml
+    loop: >-
+      {{ smabot_storage_zenko_docker_args_normed._export_cfgs.json_cfgfiles
+       | smabot.storage.zenko_docker_json_cfgfiles(
+           credmap=smabot_utils_credentials_autogen_cycle_result
+         ) }}
+    loop_control:
+      loop_var: _iter_json_cfgfile
+      label: "{{ _iter_json_cfgfile.target_path }}"
+
+
+  - block:
+
+      - include_tasks: handle_revproxy_cfg/main.yml
+
+    when: >-
+      smabot_storage_zenko_docker_args_normed.cfgfiles.reverse_proxy.enabled
+
+
+  - include_tasks: handle_dockcomp_files/main.yml
+
+
+  - set_fact:
+      _tmp_docker_env: >-
+         {{ smabot_storage_zenko_docker_args_normed.docker.environment }}
+      smabot_dockcompose_prjdir: >-
+        {{ smabot_storage_zenko_docker_args_normed.docker.dirs.compose_root.path }}
+
+  - include_tasks: handle_storage_backends/azure/main.yml
+    loop: >-
+      {{ smabot_storage_zenko_docker_args_normed.storage_backends.backends.azure
+       | ansible.builtin.dict2items }}
+    loop_control:
+      loop_var: _iter_stback_azure
+      label: "{{ _iter_stback_azure.value.name }}"
+
+
+  - block:
+
+      - ansible.builtin.include_role:
+          name: smabot.containers.compose_app_v2
+
+    environment: "{{ _tmp_docker_env }}"
+
+
+  - name: ensure all triggered handlers are run before configuration
+    ansible.builtin.meta: flush_handlers
+
+
+  - name: await readyness post handler flushing
+    ansible.builtin.include_role:
+      name: smabot.base.wait_until_webservice_ready
+    vars:
+      smabot_base_wait_until_webservice_ready_args:
+        taskname: >-
+          ensure zenko server is properly booted and reachable (timeout: 5min)
+        config:
+          url: >-
+            {{ smabot_storage_zenko_docker_args_normed.connection.metrics_url }}/ready
+
+
+  - block:
+
+        ## make env vars also avaible as ansible facts / vars so controller
+        ## local stuff like actions can also access them
+      - set_fact:
+          "{{ _iter_config_env.key }}": "{{ _iter_config_env.value }}"
+        loop: >-
+          {{ smabot_storage_zenko_docker_args_normed._export_cfgs.cfg_env | ansible.builtin.dict2items }}
+        loop_control:
+          loop_var: _iter_config_env
+          label: "{{ _iter_config_env.key }}"
+        no_log: >-
+          {{ smabot_storage_zenko_docker_args_normed.hide_secrets != False }}
+
+
+      - name: optionally handle preconfigured s3 buckets
+        include_tasks: handle_s3_buckets/main.yml
+        when: >-
+          smabot_storage_zenko_docker_args_normed.s3_frontend.buckets.buckets
+          is truthy
+
+
+        ## unset potential secret contains ansible vars again post action
+      - set_fact:
+          "{{ _iter_config_env.key }}":
+        loop: >-
+          {{ smabot_storage_zenko_docker_args_normed._export_cfgs.cfg_env | ansible.builtin.dict2items }}
+        loop_control:
+          loop_var: _iter_config_env
+          label: "{{ _iter_config_env.key }}"
+
+    environment: >-
+      {{ smabot_storage_zenko_docker_args_normed._export_cfgs.cfg_env }}
+

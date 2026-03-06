@@ -1,0 +1,27 @@
+---
+
+
+  - block:
+
+      - set_fact:
+          _tmp_venv_tasks: >-
+             {{ role_path }}/tasks/handle_storage_backends/azure/venv_tasks.yml
+
+      - ansible.builtin.include_role:
+          name: smabot.base.run_inside_venv
+        vars:
+          smabot_base_run_inside_venv_cfg:
+            tasks: >-
+              {{ _tmp_venv_tasks }}
+
+    ## TODO: make this configurable!!
+    delegate_to: localhost
+    become: no
+
+    no_log: >-
+      {{ smabot_storage_zenko_docker_args_normed.hide_secrets != False }}
+
+    when: >-
+      _iter_stback_azure.value.storage_account.access_key.from
+      == "ansible_azure_read"
+

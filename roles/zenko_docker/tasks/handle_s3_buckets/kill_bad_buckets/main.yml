@@ -1,0 +1,34 @@
+---
+
+  - name: >-
+      get all s3 buckets for
+      '{{ _iter_s3_excludes.get_buckets_cfg.access_key }}'
+    amazon.aws.s3_bucket_info: >-
+      {{ _iter_s3_excludes.get_buckets_cfg }}
+    register: _tmp_modres_blist
+
+
+  ## filter out okay buckets
+  - set_fact:
+      ## we need another format for further filtering here
+      _tmp_keep_buckets: >-
+        {{ _iter_s3_excludes.okay_buckets | dict2items
+           | selectattr('value') | map(attribute='key') | list
+        }}
+
+
+  - set_fact:
+      _bad_buckets_lst: >-
+        {{ _tmp_modres_blist.buckets
+           | rejectattr('name', 'in', _tmp_keep_buckets)
+           | list
+        }}
+
+
+  ## if any buckets remain, delete them
+  - include_tasks: buckets_rm.yml
+    loop: >-
+      {{ _bad_buckets_lst }}
+    loop_control:
+      loop_var: _iter_bad_buckets
+

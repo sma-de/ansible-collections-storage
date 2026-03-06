@@ -1,0 +1,110 @@
+---
+
+ services:
+   postgres:
+     container_name: nexus_db
+     image: "{{ sma.docker.images.nexus_db.image ~ ':' ~ sma.docker.images.nexus_db.version }}"
+     restart: unless-stopped
+     volumes:
+       - "{{ nexus_settings.local_dirs.data.db.path }}:/var/lib/postgresql/data"
+     environment:
+       POSTGRES_DB: nexus
+
+       ## note: secrets are added dynamically during pipeline run
+       POSTGRES_USER:
+       POSTGRES_PASSWORD:
+
+   {{ nexus_settings.docker.compose.services.nexus.name }}:
+     container_name: nexus3
+     image: >-
+       {{ sma.docker.images.nexus.image ~ ':' ~ sma.docker.images.nexus.version }}
+
+     ##
+     ## note: as we externalize blob storage there should be no reason
+     ##   anymore to "hard persist" nexus-data because other stuff
+     ##   it contains like configuration and logs should not need
+     ##   "hard persistence" (default docker volume should be enough)
+     ##
+     ##volumes:
+     ##  - "{{ sma.disks.data.default.location }}/{{ ansible_role_name }}/nexus:/nexus-data"
+     ##  - "{{ sma.disks.data.default.location }}/{{ ansible_role_name }}/nexus-repositories:/data/nexus-repositories"
+
+     environment:
+       NEXUS_DATASTORE_ENABLED: "true"
+       NEXUS_DATASTORE_NEXUS_JDBCURL: "jdbc:postgresql://postgres:5432/nexus"
+
+       NEXUS_DATASTORE_NEXUS_USERNAME:
+       NEXUS_DATASTORE_NEXUS_PASSWORD:
+
+     restart: unless-stopped
+     depends_on:
+       - postgres
+       ##- nexus_iq
+     ports:
+       - "127.0.0.1:80:8081"
+
+##   nexus_iq_db:
+##     container_name: nexus_iq_db
+##     image: "{{ sma.docker.images.nexus_iq_db.image ~ ':' ~ sma.docker.images.nexus_iq_db.version }}"
+##     restart: unless-stopped
+##     volumes:
+##       - {{ sma.disks.data.default.location }}/{{ ansible_role_name }}/nexus-iq-database:/var/lib/postgresql/data
+##     environment:
+##       POSTGRES_DB: nexus-iq
+##       POSTGRES_USER: "{{ lookup('community.hashi_vault.hashi_vault', 'sma/services/data/nexus-iq/database:username') }}"
+##       POSTGRES_PASSWORD: "{{ lookup('community.hashi_vault.hashi_vault', 'sma/services/data/nexus-iq/database:password') }}"
+##   nexus_iq:
+##     container_name: nexus_iq
+##     image: "{{ sma.docker.images.nexus_iq.image ~ ':' ~ sma.docker.images.nexus_iq.version }}"
+##     restart: unless-stopped
+##     volumes:
+##       - "{{ sma.disks.data.default.location }}/{{ ansible_role_name }}/nexus-iq/sonatype-work:/sonatype-work"
+##       - "{{ sma.disks.data.default.location }}/{{ ansible_role_name }}/nexus-iq/sonatype-logs:/var/log/nexus-iq-server"
+##     environment:
+##       DATABASE_TYPE: postgresql
+##       DATABASE_HOSTNAME: nexus_iq_db
+##       DATABASE_PORT: 5432
+##       DATABASE_NAME: nexus-iq
+##       DATABASE_USERNAME: "{{ lookup('community.hashi_vault.hashi_vault', 'sma/services/data/nexus-iq/database:username') }}"
+##       DATABASE_PASSWORD: "{{ lookup('community.hashi_vault.hashi_vault', 'sma/services/data/nexus-iq/database:password') }}"
+##     ports:
+##       - "127.0.0.1:9980:8080"
+##       - "127.0.0.1:9970:8070"
+##       - "127.0.0.1:9971:8071"
+##     depends_on:
+##       - nexus_iq_db
+
+   nginx:
+     image: "{{ sma.docker.images.nginx.image ~ ':' ~ sma.docker.images.nginx.version }}"
+     restart: unless-stopped
+     ports:
+       # - "127.0.0.1:443:443" # Test IF
+       # https://build.sma.de/documentation/services/nexus.html
+       - 443:443 # WebUI, Maven, NPM, PyPi, ....
+       - 9080:9080 # deprecated docker group
+       - 5000:5000 # docker group
+       - 9081:9081 # docker-public-auto
+       - 9082:9082 # docker-private-auto
+       - 9091:9091 # docker-public-auto-feature
+       - 9092:9092 # docker-private-auto-feature
+       - 9181:9181 # docker-public-manual
+       - 9182:9182 # docker-private-manual
+       - 9191:9191 # docker-public-manual-feature
+       - 9192:9192 # docker-private-manual-feature
+
+       # Nexus IQ-Server
+       - 8080:8080
+       - 8070:8070
+       - 8071:8071
+
+     depends_on:
+       - nexus
+##       - nexus_iq
+     volumes:
+       - "{{ smabot_dockcompose_prjdir }}/nginx.conf:/etc/nginx/nginx.conf:ro"
+{##}
+{% for cd in [ssl_certs.default_domain] + (ssl_certs_from_hvault_args.extra_domains | default([], True)) %}
+       - "{{ ssl_certs.client.base_path ~ '/' ~ cd }}_cert.pem:/etc/ssl/certs/{{ cd }}_cert.pem:ro"
+       - "{{ ssl_certs.client.base_path ~ '/' ~ cd }}_key.pem:/etc/ssl/certs/{{ cd }}_key.pem:ro"
+{% endfor %}
+

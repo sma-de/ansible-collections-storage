@@ -1,0 +1,14 @@
+---
+
+  - name: >-
+      parse docker compose service template file
+      '{{ _iter_dock_tmpl_files.value.path }}' and
+      combine them with other template settings
+    set_fact:
+      _tmp_combined_settings: >-
+        {{ _tmp_combined_settings | ansible.builtin.combine((lookup('template',
+             _iter_dock_tmpl_files.value.path
+           ) | ansible.builtin.from_yaml), recursive=True,
+                 list_merge='append'
+           ) }}
+

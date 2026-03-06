@@ -1,0 +1,15 @@
+---
+
+  - set_fact:
+      _tmp_modargs: >-
+        {{ _iter_s3_excludes.delete_bad_buckets_cfg
+           | ansible.builtin.combine({'name': _iter_bad_buckets.name}) }}
+    no_log: >-
+      {{ smabot_storage_zenko_docker_args_normed.hide_secrets != False }}
+
+
+  - name: >-
+      delete bucket '{{ _iter_bad_buckets.name }}' because
+      of exclusion createria
+    amazon.aws.s3_bucket: "{{ _tmp_modargs }}"
+

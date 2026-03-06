@@ -1,0 +1,24 @@
+---
+
+  - name: ensure py env is prepared
+    ansible.builtin.include_role:
+      name: smabot.azure.prepare_azure_pip
+    vars:
+      smabot_azure_prepare_azure_pip_args:
+        requirements_srcpath: >-
+          {{ smabot_storage_zenko_docker_args_normed.azcollection_requirements_srcpath }}
+
+
+  - name: query storage access keys from azure
+    smabot.azure.get_storage_access_keys: >-
+      {{ _iter_stback_azure.value._export_configs.get_stacc_keys }}
+    register: _tmp_read_keys
+
+
+  - set_fact:
+      _tmp_docker_env: >-
+         {{ _tmp_docker_env | ansible.builtin.combine({
+              _iter_stback_azure.value.env_vars.access_key:
+                 _tmp_read_keys['keys'].first_valid,
+            }) }}
+

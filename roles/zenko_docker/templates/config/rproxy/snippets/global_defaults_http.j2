@@ -1,0 +1,75 @@
+{#
+##
+## jinja template for nginx config, senseable global defaults
+## for http block
+##
+#}
+## senseable default proxy pass settings
+proxy_redirect off;
+{##}
+{#
+##
+## note: for proxy_set_header directives inheritance als works in theory
+##   but in pratice is wonky and brittle, so it is not safe to set them
+##   globally and rely on them being active for any child server/location
+##   blocks, better to always set them for each location block explicitly
+##
+## proxy_set_header Host               $host;
+## proxy_set_header X-Real-IP          $remote_addr;
+## proxy_set_header X-Forwarded-For    $proxy_add_x_forwarded_for;
+## proxy_set_header X-Forwarded-Host   $host;
+## proxy_set_header X-Forwarded-Proto  $scheme;
+#}
+
+##
+## setting it to zero means no upper max size limit
+##
+## !!IMPORTANT!! this must always be declared global or server
+##   wide to be effective even if you only need it for
+##   specific proxy paths because body size checkings
+##   happens earlier before nginx is even looking at
+##   location settings!
+client_max_body_size {{ _iter_rproxy_cfg_snippets.value.client_body_maxsize | default(0) }};
+
+## ensure we dont use totally outdated http v1.0
+proxy_http_version 1.1;
+{#
+#### for debugging only
+##log_format main_ext '$remote_addr - $remote_user [$time_local] '
+##                    '"$request" $status $body_bytes_sent '
+##                    '"$http_referer" "$http_user_agent" '
+##                    '$request_time $upstream_response_time';
+##
+##access_log /var/log/nginx/access.log main_ext;
+##
+##log_format nexus_s3 '
+##CLIENT ->NGINX:
+##Method: $request_method
+##URI: $request_uri
+##Host: $host
+##CT: $http_content_type
+##CL: $http_content_length
+##Auth: $http_authorization
+##X-Amz-Date: $http_x_amz_date
+##X-Amz-Sha256: $http_x_amz_content_sha256
+##Expect: $http_expect
+##
+##NGINX -> ZENKO:
+##sent_Host: $sent_http_host
+##sent_CT: $sent_http_content_type
+##sent_CL: $sent_http_content_length
+##sent_Expect: $sent_http_expect
+##
+##ZENKO RESPONSE:
+##status: $status
+##resp_CT: $upstream_http_content_type
+##resp_ETag: $upstream_http_etag
+##';
+##
+##access_log /var/log/nginx/s3_nexus_debug.log nexus_s3;
+#}
+{##}
+{% if _iter_rproxy_cfg_snippets.value.disable_logging | default(False) %}
+
+access_log off;
+{%- endif %}

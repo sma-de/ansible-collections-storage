@@ -1,0 +1,34 @@
+---
+
+  - set_fact:
+      _tmp_combined_settings: {}
+
+
+  - include_tasks: handle_template_files.yml
+    loop: >-
+      {{ _iter_dock_services.value.templates.template_files
+       | ansible.builtin.dict2items }}
+    loop_control:
+      loop_var: _iter_dock_tmpl_files
+
+
+  - include_tasks: handle_templates.yml
+    loop: >-
+      {{ _iter_dock_services.value.templates.templates
+       | ansible.builtin.dict2items }}
+    loop_control:
+      loop_var: _iter_dock_tmplates
+
+
+  - name: >-
+      add current docker service
+      '{{ _iter_dock_services.value.service_name }}'
+      settings to final docker-compose config
+    set_fact:
+      _tmp_docker_compose_cfg: >-
+        {{ _tmp_docker_compose_cfg | ansible.builtin.combine({
+             'services': {
+               _iter_dock_services.value.service_name: _tmp_combined_settings,
+             },
+           }, recursive=True) }}
+

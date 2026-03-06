@@ -1,0 +1,12 @@
+---
+
+  - name: >-
+      combine docker service template settings from config
+      with id '{{ _iter_dock_tmplates.key }}' with other template settings
+    set_fact:
+      _tmp_combined_settings: >-
+        {{ _tmp_combined_settings | ansible.builtin.combine(
+             _iter_dock_tmplates.value, recursive=True,
+               list_merge='append'
+           ) }}
+

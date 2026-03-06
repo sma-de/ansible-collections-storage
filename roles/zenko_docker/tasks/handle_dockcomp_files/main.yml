@@ -1,0 +1,87 @@
+---
+
+  - set_fact:
+      _tmp_docker_compose_cfg: {}
+
+
+  - name: install necessary os packages for docker build mode
+    ansible.builtin.include_role:
+      name: smabot.base.os_packages
+    vars:
+      smabot_base_os_packages_args:
+        packages:
+          default:
+            git:
+    when: >-
+      smabot_storage_zenko_docker_args_normed.docker.is_building
+
+
+  - include_tasks: handle_docker_services.yml
+    loop: >-
+      {{ smabot_storage_zenko_docker_args_normed.docker.services
+       | ansible.builtin.dict2items }}
+    loop_control:
+      loop_var: _iter_dock_services
+    when: >-
+      _iter_dock_services.value.enabled is truthy
+
+
+    ##
+    ## improve look'n'feel of templated docker-compose file by having
+    ## an empty sep line between each service definition
+    ##
+    ## update: seemingly when exporting yml to file services are written in reverse to file???
+    ##
+  - set_fact:
+      _tmp_extra_dock_services: >-
+         {{ _tmp_docker_compose_cfg.services | ansible.builtin.dict2items
+          | map(attribute='key') | reverse | list }}
+
+  - set_fact:
+      _tmp_extra_dock_services: >-
+         {{ _tmp_extra_dock_services[1:] | join('|') }}
+
+  - set_fact:
+      _tmp_extra_dock_services: >-
+         |{{ _tmp_extra_dock_services }}
+    when: >-
+      _tmp_extra_dock_services is truthy
+
+
+    ##
+    ## note: do some post regex replace tricksery to
+    ##   improve templated yaml look'n'feel beyond
+    ##   what yaml exporter can do, wanted concepts:
+    ##
+    ##     -> list elements should be one more level idented than parent key
+    ##     -> keys with sub-collections should have empty
+    ##        lines before and after them
+    ##     -> also empty sep line between different services
+    ##
+  - set_fact:
+      _tmp_modargs: >-
+        {{ smabot_storage_zenko_docker_args_normed.docker.compose_template.config
+           | ansible.builtin.combine({
+              'content': smabot_storage_zenko_docker_args_normed.docker.compose_file_pretext
+                 + (_tmp_docker_compose_cfg
+                 | ansible.builtin.to_nice_yaml(indent=2)
+                 | ansible.builtin.regex_replace('(?m)^(\s*-)', '  \1',
+                     multiline=True
+                   )
+                 | ansible.builtin.regex_replace(
+                     '(?m)^(\s*(environment|ports|volumes):)',
+                     '\n\1', multiline=True
+                   )
+                 | ansible.builtin.regex_replace(
+                     '(?m)^(\s*(image|restart|container_name' ~ _tmp_extra_dock_services ~ '):)',
+                     '\n\1', multiline=True
+                   )
+              ),
+           }) }}
+
+  - name: >-
+      create docker compose file '{{ _tmp_modargs.dest }}'
+    ansible.builtin.copy: "{{ _tmp_modargs }}"
+    notify:
+      - "restart docker compose project v2"
+

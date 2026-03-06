@@ -1,0 +1,103 @@
+---
+
+  - set_fact:
+      _tmp_file_content: {}
+      _tmp_upsrc_cfg: {}
+
+##
+## note: at least some of these files can contains
+##   secrets (login credentials), so handle output here as confidential
+##
+
+  - block:
+
+      - block:
+
+          - name: get upstream base config from service image
+            community.docker.docker_container: >-
+              {{ _iter_json_cfgfile.upstream_base._export_configs.get_cfg_from_docker }}
+            register: _tmp_modres_get_upstream_cfg
+
+          - set_fact:
+              _tmp_upsrc_cfg: >-
+                 {{ _tmp_modres_get_upstream_cfg.container.Output
+                  | ansible.builtin.from_json }}
+
+        when: >-
+          _iter_json_cfgfile.upstream_base.docker_source_path | default(False)
+
+
+        ##
+        ## note: important here to not be recursive when combining
+        ##   merge_overwrites because we use it mainly to remove
+        ##   unsenseable preset defaults
+        ##
+      - name: merge upstream base config settings
+        set_fact:
+          _tmp_file_content: >-
+            {{ _tmp_file_content | ansible.builtin.combine((
+                 _tmp_upsrc_cfg | ansible.builtin.combine(
+                   _iter_json_cfgfile.upstream_base.merge_overwrites
+               )), recursive=True, list_merge='append')
+            }}
+
+    no_log: >-
+      {{ smabot_storage_zenko_docker_args_normed.hide_secrets != False }}
+
+    when: >-
+      _iter_json_cfgfile.upstream_base.enabled | default(False)
+
+
+  - name: optionally parse source template file
+    set_fact:
+      _tmp_file_content: >-
+        {{ _tmp_file_content | ansible.builtin.combine((lookup('template',
+             _iter_json_cfgfile.srcfile_template
+           ) | ansible.builtin.from_json), recursive=True,
+                list_merge='append'
+           ) }}
+    when: >-
+      _iter_json_cfgfile.srcfile_template is truthy
+    no_log: >-
+      {{ smabot_storage_zenko_docker_args_normed.hide_secrets != False }}
+
+
+  - name: optionally merge settings from role config
+    set_fact:
+      _tmp_file_content: >-
+        {{ _tmp_file_content | ansible.builtin.combine(
+             _iter_json_cfgfile.settings, recursive=True, list_merge='append'
+           ) }}
+    when: >-
+      _iter_json_cfgfile.settings is truthy
+    no_log: >-
+      {{ smabot_storage_zenko_docker_args_normed.hide_secrets != False }}
+
+
+  - set_fact:
+      _tmp_modargs: >-
+        {{ _iter_json_cfgfile.file_config | ansible.builtin.combine({
+              'content': (_tmp_file_content 
+                 | ansible.builtin.to_nice_json(indent=2)
+              ),
+           }) }}
+    no_log: >-
+      {{ smabot_storage_zenko_docker_args_normed.hide_secrets != False }}
+
+  - name: >-
+      create config file '{{ _tmp_modargs.dest }}'
+    ansible.builtin.copy: "{{ _tmp_modargs }}"
+      ## optional: validate if json is valid, needs jq installed on target
+      ##validate: 'jq -e . %s'
+
+    no_log: >-
+      {{ smabot_storage_zenko_docker_args_normed.hide_secrets != False }}
+
+    notify:
+      - "restart docker compose project v2"
+
+
+    ## clear secret containing var post use
+  - set_fact:
+      _tmp_file_content:
+

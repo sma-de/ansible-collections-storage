@@ -1,0 +1,41 @@
+{#
+##
+## jinja template for nginx location proxy-pass block optimized (with
+## AI input) for managing big data moving paths like for example as
+## frontend for s3 storage backend or sonatype nexus and similar
+##
+## mainly intended to be inserted inside a location scope, but
+## should also work more globally
+##
+#}
+tcp_nodelay on;
+keepalive_timeout 15s;
+
+## ensure we dont use totally outdated http v1.0
+proxy_http_version 1.1;
+
+## allow efficient nginx based "upstream keepalive" management
+proxy_set_header Connection "";
+
+proxy_set_header Expect $http_expect;
+proxy_set_header Content-Type $http_content_type;
+proxy_pass_request_headers on;
+
+## disable nginx buffering completly
+proxy_buffering off;
+proxy_request_buffering off;
+
+## reduce way to conservative default connection to
+proxy_connect_timeout {{ _iter_rproxy_cfg_snippets.value.timeouts.proxy_connect | default('10s') }};
+
+proxy_read_timeout    {{ _iter_rproxy_cfg_snippets.value.timeouts.proxy_read | default('1h') }};
+proxy_send_timeout    {{ _iter_rproxy_cfg_snippets.value.timeouts.proxy_send | default('1h') }};
+send_timeout          {{ _iter_rproxy_cfg_snippets.value.timeouts.send | default('1h') }};
+
+## setting it to zero means no upper max size limit
+## (only here for clearer documentation of intend, must
+##  also be stated in server/http context to be effective)
+client_max_body_size {{ _iter_rproxy_cfg_snippets.value.client_body_maxsize | default(0) }};
+
+## avoid local disk temp files entirely
+proxy_max_temp_file_size 0;

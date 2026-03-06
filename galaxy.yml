@@ -13,7 +13,8 @@ dependencies:
 ##    "other_namespace.collection1": ">=1.0.0"
 ##    "other_namespace.collection2": ">=2.0.0,<3.0.0"
   "community.general": "*"    # note: "*" selects the highest version available
-  "smabot.base": "*"    # note: "*" selects the highest version available
+  "amazon.aws": "*"
+  "smabot.base": "*"
 
 license:
   - "BSD3"

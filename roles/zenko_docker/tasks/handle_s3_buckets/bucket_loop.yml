@@ -1,0 +1,13 @@
+---
+
+  - name: manage s3 bucket '{{ _iter_s3_buckets.value.name }}'
+    amazon.aws.s3_bucket: >-
+      {{ _iter_s3_buckets.value.configs.bucket_manage }}
+
+
+  - name: manage s3 bucket acl for '{{ _iter_s3_buckets.value.name }}'
+    smabot.storage.s3_manage_acl: >-
+      {{ _iter_s3_buckets.value.configs.bucket_acl }}
+    when: >-
+      (_iter_s3_buckets.value.configs.bucket_acl | default(False)) is truthy
+

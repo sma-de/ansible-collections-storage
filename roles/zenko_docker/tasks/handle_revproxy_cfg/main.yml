@@ -1,0 +1,32 @@
+---
+
+  - set_fact:
+      _tmp_rproxy_cfg_settings: >-
+         {{ smabot_storage_zenko_docker_args_normed.cfgfiles.reverse_proxy }}
+
+
+  - name: optionally load applyable snippets
+    set_fact:
+      _tmp_rproxy_cfg_settings: >-
+        {{ _tmp_rproxy_cfg_settings | ansible.builtin.combine({
+            '_snippet_codes': {
+               _iter_rproxy_cfg_snippets.key: lookup('ansible.builtin.template',
+                 _iter_rproxy_cfg_snippets.value.source_template
+               )
+            }}, recursive=True)
+        }}
+    loop: >-
+      {{ smabot_storage_zenko_docker_args_normed.cfgfiles.reverse_proxy.snippets
+       | dict2items
+      }}
+    loop_control:
+      loop_var: _iter_rproxy_cfg_snippets
+    when: _iter_rproxy_cfg_snippets.value.enabled
+
+
+  - name: optionally template reverse proxy config file
+    ansible.builtin.template: >-
+      {{ smabot_storage_zenko_docker_args_normed.cfgfiles.reverse_proxy.template_config }}
+    notify:
+      - "restart docker compose project v2"
+

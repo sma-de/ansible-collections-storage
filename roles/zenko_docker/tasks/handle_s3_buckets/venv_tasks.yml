@@ -1,0 +1,22 @@
+---
+
+  ## optionally handle exclusive mode per user
+  - include_tasks: kill_bad_buckets/main.yml
+    loop: >-
+      {{ smabot_storage_zenko_docker_args_normed.s3_frontend.buckets._export_cfgs.excludes }}
+    loop_control:
+      loop_var: _iter_s3_excludes
+      label: "{{ _iter_s3_excludes.user }}"
+    when: >-
+      (smabot_storage_zenko_docker_args_normed.s3_frontend.buckets._export_cfgs.excludes
+       | default(False)) is truthy
+
+
+  - include_tasks: bucket_loop.yml
+    loop: >-
+      {{ smabot_storage_zenko_docker_args_normed.s3_frontend.buckets.buckets
+       | ansible.builtin.dict2items }}
+    loop_control:
+      loop_var: _iter_s3_buckets
+      label: "{{ _iter_s3_buckets.value.name }}"
+

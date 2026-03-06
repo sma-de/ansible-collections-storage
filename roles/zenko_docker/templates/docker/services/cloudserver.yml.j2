@@ -1,0 +1,11 @@
+---
+
+  environment:
+    # enable multiple backends (location constraints defined in locationConfig.json)
+    S3DATA: "multiple"   # requires mounting locationConfig.json
+
+    # run standalone (don’t connect to Orbit)
+    REMOTE_MANAGEMENT_DISABLE: "1"
+
+  restart: unless-stopped
+

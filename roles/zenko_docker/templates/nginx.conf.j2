@@ -1,0 +1,170 @@
+events {
+}
+
+http {
+    proxy_send_timeout        240;
+    proxy_read_timeout        600;
+    proxy_buffering           off;
+    keepalive_timeout         10 10;
+    tcp_nodelay               on;
+    sendfile                  on;
+
+    access_log off;
+
+    client_max_body_size  80G;
+
+    ssl_certificate /etc/ssl/certs/{{ ssl_certs.default_domain }}_cert.pem;
+    ssl_certificate_key /etc/ssl/certs/{{ ssl_certs.default_domain }}_key.pem;
+
+    server {
+        listen 80;
+        server_name _;
+        return 301 https://$host$request_uri;
+    }
+
+# ###############################################################################################################
+# Default Web-Server for nexus-iq
+#
+##    server {
+##        listen                  443 ssl;
+##        server_name             nexus-iq.sma.dev;
+##
+##        #add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+##
+##        location / {
+##            #add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+##
+##            proxy_pass            http://nexus_iq:8070/;
+##            proxy_redirect        off;
+##            proxy_set_header      Host $host;
+##            proxy_set_header      X-Real-IP $remote_addr;
+##            proxy_set_header      X-Forwarded-For $proxy_add_x_forwarded_for;
+##            proxy_set_header      X-Forwarded-Host $server_name;
+##            proxy_set_header      X-Forwarded-Proto $scheme;
+##        }
+##    }
+
+# ###############################################################################################################
+# Backup entries for Nexus
+#
+    server {
+        listen                  443 ssl;
+        server_name             repositories.developer.sunnyportal.com nexus.sma.de;
+
+        ssl_certificate /etc/ssl/certs/{{ ssl_certs_from_hvault_args.extra_domains | first }}_cert.pem;
+        ssl_certificate_key /etc/ssl/certs/{{ ssl_certs_from_hvault_args.extra_domains | first }}_key.pem;
+
+        #add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+        location / {
+            #add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+            proxy_pass            http://nexus3:8081/;
+            proxy_redirect        off;
+            proxy_set_header      Host $host;
+            proxy_set_header      X-Real-IP $remote_addr;
+            proxy_set_header      X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header      X-Forwarded-Host $server_name;
+            proxy_set_header      X-Forwarded-Proto $scheme;
+        }
+    }
+
+    # ###############################################################################################################
+    # Default Web-Server for Nexus
+    #
+    server {
+        listen                  443 ssl default_server;
+        server_name             nexus.sma.dev;
+
+        #add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+        location / {
+            #add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+            proxy_pass            http://nexus3:8081/;
+            proxy_redirect        off;
+            proxy_set_header      Host $host;
+            proxy_set_header      X-Real-IP $remote_addr;
+            proxy_set_header      X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header      X-Forwarded-Host $server_name;
+            proxy_set_header      X-Forwarded-Proto $scheme;
+        }
+
+
+        ##
+        ## note: nexus does support pypi proxying which works totally
+        ##   fine in general but for some reason does not follow
+        ##   the "predictable-urls" mechanism for source url's one
+        ##   to one (https://docs.pypi.org/api/#predictable-urls),
+        ##   it has them, but they are a bit different, we will fix
+        ##   this for now with a simple nginx rgex redirect rule
+        ##
+        location ~ ^(/repository/pypi/packages)/source/[^/]+/([a-zA-Z0-9_-]+)/(.*-(([0-9]+\.)+[0-9]+)\..*)$ {
+            ##
+            ## used regex groups:
+            ##
+            ##   $1 >> common prefix
+            ##   $2 >> package-name / id
+            ##   $3 >> common suffix
+            ##   $4 >> package version
+            ##
+            return 302 $1/$2/$4/$3;
+        }
+    }
+
+    # Ports: https://build.sma.de/documentation/services/nexus.html
+    #
+    # - 5000: default docker port - READ ONLY
+    # - 9080: docker group (same as 5000) - READ ONLY
+    # - 9081: public docker repository (auto) - WRITABLE for Jenkins
+    # - 9082: private docker repository (auto) - WRITABLE for Jenkins
+    # - 9092: private feature docker repository (auto) - WRITABLE for Jenkins
+    # - 9181: public docker repository (manual) - WRITABLE for Users
+    # - 9182: private docker repository (manual) - WRITABLE for Users
+    # - 9192: private feature (manual) - WRITABLE for Users
+
+{% for web_port in [ 5000, 9080, 9081, 9082, 9091, 9092, 9181, 9182, 9191, 9192 ] %}
+
+    server {
+        listen                    {{ web_port }} ssl;
+
+        location / {
+            proxy_pass            http://nexus3:{{ web_port }}/;
+            proxy_redirect        off;
+            proxy_set_header      Host $http_host;
+            proxy_set_header      X-Real-IP $remote_addr;
+            proxy_set_header      X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header      X-Forwarded-Host $server_name;
+            proxy_set_header      X-Forwarded-Proto $scheme;
+
+            proxy_http_version    1.1;
+            proxy_buffering       off;
+        }
+    }
+{% endfor %}
+
+
+{% for iq_mapping in [ [8080, 8080], [ 8070, 8070 ], [8071, 8071] ] %}
+
+##    server {
+##        listen                    {{ iq_mapping[0] }} ssl;
+##
+##        location / {
+##            proxy_pass            http://nexus_iq:{{ iq_mapping[1] }}/;
+##            proxy_redirect        off;
+##            proxy_set_header      Host $http_host;
+##            proxy_set_header      X-Real-IP $remote_addr;
+##            proxy_set_header      X-Forwarded-For $proxy_add_x_forwarded_for;
+##            proxy_set_header      X-Forwarded-Host $server_name;
+##            proxy_set_header      X-Forwarded-Proto $scheme;
+##
+##            proxy_http_version    1.1;
+##            proxy_buffering       off;
+##        }
+##    }
+{% endfor %}
+
+}
+
+
+
